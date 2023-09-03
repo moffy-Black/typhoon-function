@@ -1,4 +1,3 @@
 requests
-functions-framework==3.*
 pyproj
 firebase-admin

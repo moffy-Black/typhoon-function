@@ -17,35 +17,49 @@ def get_event_by_date(date_str):
         return False, e
 
 def typhoon_check(docs,typhoon_info):
+    docs_flags = []
     for doc in docs:
         doc_data = doc.to_dict();path = doc.reference.path;event_ref = DB.document(path)
+        doc_flags = []
         event_type = doc_data.get('eventtype')
         if event_type == 'event':
             event_location =  doc_data.get('location')
             event_longitude = event_location.longitude;event_latitude = event_location.latitude
+            events = dict();events.setdefault("date_section_flag",dict())
             for typhoon_dict in typhoon_info:
                 typhoon_longitude,typhoon_latitude = typhoon_dict["台風"]["位置"]; radius = typhoon_dict["台風"]["半径"] * 1000
                 if is_typhoon_warning(typhoon_longitude,typhoon_latitude,event_longitude,event_latitude,radius):
-                    event_ref.set({"date_section_flag":{typhoon_dict["時刻"]["value"]:True}},merge=True)
+                    events["date_section_flag"][typhoon_dict["時刻"]["value"]] = True
+                    doc_flags.append(True)
                 else:
-                    event_ref.set({"date_section_flag":{typhoon_dict["時刻"]["value"]:False}},merge=True)
+                    events["date_section_flag"][typhoon_dict["時刻"]["value"]] = False
+                    doc_flags.append(False)
+            events["warning"] = any(doc_flags)
+            event_ref.set(events,merge=True)
         elif event_type == 'train':
             stations = doc_data.get('stations')
             for station in stations:
                 station_location = station.get('location')
                 station_longitude = station_location.longitude;station_latitude = station_location.latitude
+                station_flags = []
                 for typhoon_dict in typhoon_info:
                     typhoon_longitude,typhoon_latitude = typhoon_dict["台風"]["位置"]; radius = typhoon_dict["台風"]["半径"] * 1000
                     station.setdefault("date_section_flag",dict())
                     if is_typhoon_warning(typhoon_longitude,typhoon_latitude,station_longitude,station_latitude,radius):
                         station["date_section_flag"][typhoon_dict["時刻"]["value"]] = True
-                        station["warning"]= True
+                        station_flags.append(True)
                     else:
                         station["date_section_flag"][typhoon_dict["時刻"]["value"]] = False
-                        station["warning"]= False
-            event_ref.set({"stations":stations},merge=True)
+                        station_flags.append(False)
+                station["warning"] = any(station_flags)
+                doc_flags.append(any(station_flags))
+            event_ref.set({"stations":stations,"warning":any(doc_flags)},merge=True)
         else:
             pass
+        docs_flags.append(any(doc_flags))
+    if len(docs_flags) != 0:
+        package_ref = DB.collection("travel_package").document(docs[0].reference.parent.parent.id)
+        package_ref.set({"warning":any(docs_flags)},merge=True)
 
 def classfy_date(typhoon_info_list):
     typhoon_info_bydate_dict = dict()
