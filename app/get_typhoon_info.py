@@ -21,6 +21,7 @@ def get_typhoon_info()->(bool,list or str):
         return True,typhoon_info_list
     else:
         return False, 'get typhoon_xml but not get typhoon_info'
+
 def _get_latest_typhoon_xml(url:str) -> (bool,str):
     try:
         response = requests.get(url)
@@ -80,10 +81,9 @@ def _extracting_typhoon_info(xml_data:str) -> (bool,list or str):
     try:
         root = ET.fromstring(xml_data)
         infos = root.findall(f".//{_name_space}MeteorologicalInfo")
-        # remark = root.find(f".//{_name_space}Remark").text
 
         for info in infos:
-            data_dict = {"時刻":{"type":"","value":""},"台風":{"位置":(0.0,0.0), "半径":0}}
+            data_dict = {"時刻":{"type":"","value":""},"位置":(0.0,0.0),"暴風":{"位置":(0.0,0.0), "半径":0}}
             date_time = info.find(f"{_name_space}DateTime")
             data_dict["時刻"]["type"] = date_time.attrib["type"];data_dict["時刻"]["value"] = date_time.text
 
@@ -106,17 +106,33 @@ def _extracting_center_position(info,data_dict,name_space):
         for coordinate in coordinates:
             if coordinate.attrib["type"] == "中心位置（度）":
                 _, latitude, longitude = coordinate.text.strip("/").split("+")
-                data_dict["台風"]["位置"] = tuple(map(float,[longitude,latitude]))
+                data_dict["位置"] = tuple(map(float,[longitude,latitude]))
     else:
         base_points = info.findall(f".//{name_space}BasePoint")
         for base_point in base_points:
             if base_point.attrib["type"] == "中心位置（度）":
                 _, latitude, longitude = base_point.text.strip("/").split("+")
-                data_dict["台風"]["位置"] = tuple(map(float,[longitude,latitude]))
+                data_dict["位置"] = tuple(map(float,[longitude,latitude]))
     return
 
 def _extracting_wind_part(wind_area_parts,data_dict,name_space) -> bool:
     for wind_area_part in wind_area_parts:
+        if wind_area_part.attrib["type"] == "強風域":
+            directions = wind_area_part.findall(f".//{name_space}Direction")
+            radius = wind_area_part.findall(f".//{name_space}Radius")
+            radius_list = []
+            for r in radius:
+                if r.attrib["unit"] == "km":
+                    radius_list.append(r.text)
+            if len(radius_list) == 1:
+                if radius_list[0] is not None:
+                    data_dict["強風"] = {"半径":float(radius_list[0]), "位置":data_dict["位置"]}
+            else:
+                azimuth = directions[0].text
+                radius = (int(radius_list[0]) + int(radius_list[1])) / 2
+                k_distance = (int(radius_list[0]) - int(radius_list[1])) / 2
+                data_dict["強風"] = {"半径":radius, "位置":_calc_center(data_dict["位置"],azimuth,k_distance)}
+
         if wind_area_part.attrib["type"] in ["暴風域","暴風警戒域"]:
             directions = wind_area_part.findall(f".//{name_space}Direction")
             radius = wind_area_part.findall(f".//{name_space}Radius")
@@ -126,15 +142,15 @@ def _extracting_wind_part(wind_area_parts,data_dict,name_space) -> bool:
                     radius_list.append(r.text)
             if len(radius_list) == 1:
                 if radius_list[0] is not None:
-                    data_dict["台風"]["半径"] = float(radius_list[0])
+                    data_dict["暴風"]["半径"] = float(radius_list[0])
                 else:
                     return False
             else:
                 azimuth = directions[0].text
                 radius = (int(radius_list[0]) + int(radius_list[1])) / 2
                 k_distance = (int(radius_list[0]) - int(radius_list[1])) / 2
-                data_dict["台風"]["半径"] = radius
-                data_dict["台風"]["位置"] = _calc_center(data_dict["台風"]["位置"],azimuth,k_distance)
+                data_dict["暴風"]["半径"] = radius
+                data_dict["暴風"]["位置"] = _calc_center(data_dict["位置"],azimuth,k_distance)
     return True
 
 def _calc_center(lonlat, azimuth, k_distance):

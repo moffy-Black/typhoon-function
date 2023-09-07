@@ -26,8 +26,14 @@ def typhoon_check(docs,typhoon_info):
             event_location =  doc_data.get('location')
             event_longitude = event_location.longitude;event_latitude = event_location.latitude
             events = dict();events.setdefault("date_section_flag",dict())
+
             for typhoon_dict in typhoon_info:
-                typhoon_longitude,typhoon_latitude = typhoon_dict["台風"]["位置"]; radius = typhoon_dict["台風"]["半径"] * 1000
+                if "強風" in typhoon_dict:
+                    wind_longitude,wind_latitude = typhoon_dict["強風"]["位置"]; wind_radius= typhoon_dict["強風"]["半径"] * 1000
+                    if is_typhoon_warning(wind_longitude,wind_latitude,event_longitude,event_latitude,wind_radius):
+                        events["strong_wind_flag"] = True
+                        docs_flags.append(True)
+                typhoon_longitude,typhoon_latitude = typhoon_dict["暴風"]["位置"]; radius = typhoon_dict["暴風"]["半径"] * 1000
                 if is_typhoon_warning(typhoon_longitude,typhoon_latitude,event_longitude,event_latitude,radius):
                     events["date_section_flag"][typhoon_dict["時刻"]["value"]] = True
                     doc_flags.append(True)
@@ -43,7 +49,7 @@ def typhoon_check(docs,typhoon_info):
                 station_longitude = station_location.longitude;station_latitude = station_location.latitude
                 station_flags = []
                 for typhoon_dict in typhoon_info:
-                    typhoon_longitude,typhoon_latitude = typhoon_dict["台風"]["位置"]; radius = typhoon_dict["台風"]["半径"] * 1000
+                    typhoon_longitude,typhoon_latitude = typhoon_dict["暴風"]["位置"]; radius = typhoon_dict["暴風"]["半径"] * 1000
                     station.setdefault("date_section_flag",dict())
                     if is_typhoon_warning(typhoon_longitude,typhoon_latitude,station_longitude,station_latitude,radius):
                         station["date_section_flag"][typhoon_dict["時刻"]["value"]] = True
